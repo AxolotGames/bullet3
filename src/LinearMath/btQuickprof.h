@@ -103,7 +103,7 @@ public:
 	void* GetUserPointer() const { return m_userPtr; }
 	void SetUserPointer(void* ptr) { m_userPtr = ptr; }
 
-protected:
+//protected:
 	const char* Name;
 	int TotalCalls;
 	float TotalTime;
@@ -142,7 +142,7 @@ public:
 	int Get_Current_Parent_Total_Calls(void) { return CurrentParent->Get_Total_Calls(); }
 	float Get_Current_Parent_Total_Time(void) { return CurrentParent->Get_Total_Time(); }
 
-protected:
+//protected:
 	CProfileNode* CurrentParent;
 	CProfileNode* CurrentChild;
 
@@ -163,6 +163,7 @@ public:
 	//	}
 
 	static void Reset(void);
+
 	static void Increment_Frame_Counter(void);
 	static int Get_Frame_Count_Since_Reset(void) { return FrameCounter; }
 	static float Get_Time_Since_Reset(void);
@@ -172,11 +173,16 @@ public:
 	//
 	//		return new CProfileIterator( &Root );
 	//	}
+
 	static void Release_Iterator(CProfileIterator* iterator) { delete (iterator); }
 
 	static void dumpRecursive(CProfileIterator* profileIterator, int spacing);
 
 	static void dumpAll();
+
+	// NOTE (daniel): Added for use in scrap mechanic
+	static bool Pause;
+	static CProfileIterator* Get_Iterator(int threadIndex);
 
 private:
 	static int FrameCounter;

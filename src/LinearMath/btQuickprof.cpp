@@ -537,6 +537,7 @@ CProfileNode* gCurrentNodes[BT_QUICKPROF_MAX_THREAD_COUNT] =
 
 int CProfileManager::FrameCounter = 0;
 unsigned long int CProfileManager::ResetTime = 0;
+bool CProfileManager::Pause = false;
 
 CProfileIterator* CProfileManager::Get_Iterator(void)
 {
@@ -544,6 +545,11 @@ CProfileIterator* CProfileManager::Get_Iterator(void)
 	if ((threadIndex < 0) || threadIndex >= BT_QUICKPROF_MAX_THREAD_COUNT)
 		return 0;
 
+	return new CProfileIterator(&gRoots[threadIndex]);
+}
+
+CProfileIterator* CProfileManager::Get_Iterator(int threadIndex)
+{
 	return new CProfileIterator(&gRoots[threadIndex]);
 }
 
@@ -570,6 +576,8 @@ void CProfileManager::CleanupMemory(void)
  *=============================================================================================*/
 void CProfileManager::Start_Profile(const char* name)
 {
+	if (Pause) return;
+
 	int threadIndex = btQuickprofGetCurrentThreadIndex2();
 	if ((threadIndex < 0) || threadIndex >= BT_QUICKPROF_MAX_THREAD_COUNT)
 		return;
@@ -587,6 +595,8 @@ void CProfileManager::Start_Profile(const char* name)
  *=============================================================================================*/
 void CProfileManager::Stop_Profile(void)
 {
+	if (Pause) return;
+
 	int threadIndex = btQuickprofGetCurrentThreadIndex2();
 	if ((threadIndex < 0) || threadIndex >= BT_QUICKPROF_MAX_THREAD_COUNT)
 		return;
@@ -606,6 +616,8 @@ void CProfileManager::Stop_Profile(void)
  *=============================================================================================*/
 void CProfileManager::Reset(void)
 {
+	if (Pause) return;
+
 	gProfileClock.reset();
 	int threadIndex = btQuickprofGetCurrentThreadIndex2();
 	if ((threadIndex < 0) || threadIndex >= BT_QUICKPROF_MAX_THREAD_COUNT)
@@ -621,6 +633,7 @@ void CProfileManager::Reset(void)
  *=============================================================================================*/
 void CProfileManager::Increment_Frame_Counter(void)
 {
+	if (Pause) return;
 	FrameCounter++;
 }
 
@@ -697,9 +710,11 @@ void CProfileManager::dumpAll()
 
 void btEnterProfileZoneDefault(const char* name)
 {
+	CProfileManager::Start_Profile(name);
 }
 void btLeaveProfileZoneDefault()
 {
+	CProfileManager::Stop_Profile();
 }
 
 #else

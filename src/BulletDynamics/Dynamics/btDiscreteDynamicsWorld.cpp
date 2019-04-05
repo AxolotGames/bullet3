@@ -443,7 +443,7 @@ int btDiscreteDynamicsWorld::stepSimulation(btScalar timeStep, int maxSubSteps, 
 	clearForces();
 
 #ifndef BT_NO_PROFILE
-	CProfileManager::Increment_Frame_Counter();
+	//CProfileManager::Increment_Frame_Counter();
 #endif  //BT_NO_PROFILE
 
 	return numSimulationSubSteps;
@@ -1102,7 +1102,7 @@ void btDiscreteDynamicsWorld::startProfiling(btScalar timeStep)
 	(void)timeStep;
 
 #ifndef BT_NO_PROFILE
-	CProfileManager::Reset();
+	//CProfileManager::Reset();
 #endif  //BT_NO_PROFILE
 }
 
