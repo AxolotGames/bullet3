@@ -118,7 +118,7 @@ static btVector3 convexHullSupport(const btVector3& localDirOrg, const btVector3
 
 	btScalar maxDot;
 	long ptIndex = vec.maxDot(points, numPoints, maxDot);
-	btAssert(ptIndex >= 0);
+	btAssert(ptIndex >= 0 && ptIndex < numPoints);
 	if (ptIndex < 0)
 	{
 		ptIndex = 0;
