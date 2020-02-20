@@ -130,7 +130,12 @@ inline int btGetVersion()
 			#define btAssert assert
 		#endif//_MSC_VER
 	#else
-		#define btAssert(x)
+		#ifdef _MSC_VER
+			#include <stdio.h>
+			#define btAssert(x) { if(!(x)){printf("Assert "__FILE__ ":%u (%s)\n", __LINE__, #x);__debugbreak();	}}
+		#else//_MSC_VER
+			#define btAssert(x)
+		#endif//_MSC_VER
 	#endif
 		//btFullAssert is optional, slows down a lot
 		#define btFullAssert(x)
