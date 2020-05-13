@@ -67,6 +67,7 @@ void btConvexShape::project(const btTransform& trans, const btVector3& dir, btSc
 	}
 }
 
+#pragma optimize("",off)
 static btVector3 convexHullSupport(const btVector3& localDirOrg, const btVector3* points, int numPoints, const btVector3& localScaling)
 {
 	btVector3 vec = localDirOrg * localScaling;
@@ -127,6 +128,7 @@ static btVector3 convexHullSupport(const btVector3& localDirOrg, const btVector3
 	return supVec;
 #endif  //__SPU__
 }
+#pragma optimize("",on)
 
 btVector3 btConvexShape::localGetSupportVertexWithoutMarginNonVirtual(const btVector3& localDir) const
 {

@@ -42,6 +42,7 @@ typedef float float4 __attribute__((vector_size(16)));
 
 #include <emmintrin.h>
 
+#pragma optimize("",off)
 long _maxdot_large(const float *vv, const float *vec, unsigned long count, float *dotResult);
 long _maxdot_large(const float *vv, const float *vec, unsigned long count, float *dotResult)
 {
@@ -433,6 +434,7 @@ long _maxdot_large(const float *vv, const float *vec, unsigned long count, float
 	_mm_store_ss(dotResult, dotMax);
 	return maxIndex;
 }
+#pragma optimize("",on)
 
 long _mindot_large(const float *vv, const float *vec, unsigned long count, float *dotResult);
 

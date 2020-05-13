@@ -995,6 +995,7 @@ SIMD_FORCE_INLINE btVector3 btVector3::rotate(const btVector3& wAxis, const btSc
 #endif
 }
 
+#pragma optimize("",off)
 SIMD_FORCE_INLINE long btVector3::maxDot(const btVector3* array, long array_count, btScalar& dotOut) const
 {
 #if (defined BT_USE_SSE && defined BT_USE_SIMD_VECTOR3 && defined BT_USE_SSE_IN_API) || defined(BT_USE_NEON)
@@ -1029,6 +1030,7 @@ SIMD_FORCE_INLINE long btVector3::maxDot(const btVector3* array, long array_coun
 	return _maxdot_large((float*)array, (float*)&m_floats[0], array_count, &dotOut);
 #endif
 }
+#pragma optimize("",on)
 
 SIMD_FORCE_INLINE long btVector3::minDot(const btVector3* array, long array_count, btScalar& dotOut) const
 {
