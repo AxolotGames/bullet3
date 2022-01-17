@@ -18,6 +18,7 @@ subject to the following restrictions:
 #define BT_COMPOUND_COLLISION_ALGORITHM_H
 
 #include "btActivatingCollisionAlgorithm.h"
+#include "btHashedSimplePairCache.h"
 #include "BulletCollision/BroadphaseCollision/btDispatcher.h"
 #include "BulletCollision/BroadphaseCollision/btBroadphaseInterface.h"
 
@@ -38,44 +39,30 @@ extern btShapePairCallback gCompoundChildShapePairCallback;
 class btCompoundCollisionAlgorithm : public btActivatingCollisionAlgorithm
 {
 	btNodeStack stack2;
-	btManifoldArray manifoldArray;
 
 protected:
-	btAlignedObjectArray<btCollisionAlgorithm*> m_childCollisionAlgorithms;
 	bool m_isSwapped;
 
 	class btPersistentManifold* m_sharedManifold;
 	bool m_ownsManifold;
 
+	class btHashedSimplePairCache* m_childCollisionAlgorithmCache;
+	btSimplePairArray m_removePairs;
+
 	int m_compoundShapeRevision;  //to keep track of changes, so that childAlgorithm array can be updated
 
 	void removeChildAlgorithms();
-
-	void preallocateChildAlgorithms(const btCollisionObjectWrapper* body0Wrap, const btCollisionObjectWrapper* body1Wrap);
 
 public:
 	btCompoundCollisionAlgorithm(const btCollisionAlgorithmConstructionInfo& ci, const btCollisionObjectWrapper* body0Wrap, const btCollisionObjectWrapper* body1Wrap, bool isSwapped);
 
 	virtual ~btCompoundCollisionAlgorithm();
-
-	btCollisionAlgorithm* getChildAlgorithm(int n) const
-	{
-		return m_childCollisionAlgorithms[n];
-	}
-
+	
 	virtual void processCollision(const btCollisionObjectWrapper* body0Wrap, const btCollisionObjectWrapper* body1Wrap, const btDispatcherInfo& dispatchInfo, btManifoldResult* resultOut);
 
 	btScalar calculateTimeOfImpact(btCollisionObject* body0, btCollisionObject* body1, const btDispatcherInfo& dispatchInfo, btManifoldResult* resultOut);
 
-	virtual void getAllContactManifolds(btManifoldArray& manifoldArray)
-	{
-		int i;
-		for (i = 0; i < m_childCollisionAlgorithms.size(); i++)
-		{
-			if (m_childCollisionAlgorithms[i])
-				m_childCollisionAlgorithms[i]->getAllContactManifolds(manifoldArray);
-		}
-	}
+	virtual void getAllContactManifolds( btManifoldArray& manifoldArray );
 
 	struct CreateFunc : public btCollisionAlgorithmCreateFunc
 	{
