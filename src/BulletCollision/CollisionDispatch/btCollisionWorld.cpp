@@ -878,24 +878,51 @@ void btCollisionWorld::objectQuerySingleInternal(const btConvexShape* castShape,
 
 				BT_PROFILE("convexSweepCompound");
 				const btCompoundShape* compoundShape = static_cast<const btCompoundShape*>(collisionShape);
-
-				btVector3 fromLocalAabbMin, fromLocalAabbMax;
-				btVector3 toLocalAabbMin, toLocalAabbMax;
-
-				castShape->getAabb(colObjWorldTransform.inverse() * convexFromTrans, fromLocalAabbMin, fromLocalAabbMax);
-				castShape->getAabb(colObjWorldTransform.inverse() * convexToTrans, toLocalAabbMin, toLocalAabbMax);
-
-				fromLocalAabbMin.setMin(toLocalAabbMin);
-				fromLocalAabbMax.setMax(toLocalAabbMax);
-
+				
 				btCompoundLeafCallback callback(colObjWrap, castShape, convexFromTrans, convexToTrans,
 												allowedPenetration, compoundShape, colObjWorldTransform, resultCallback);
 
 				const btDbvt* tree = compoundShape->getDynamicAabbTree();
 				if (tree)
 				{
-					const ATTRIBUTE_ALIGNED16(btDbvtVolume) bounds = btDbvtVolume::FromMM(fromLocalAabbMin, fromLocalAabbMax);
-					tree->collideTV(tree->m_root, bounds, callback);
+					btTransform worldToCollisionObject = colObjWorldTransform.inverse();
+				
+					btVector3 rayDir = (worldToCollisionObject * convexToTrans).getOrigin() - (worldToCollisionObject * convexFromTrans).getOrigin();
+
+					rayDir.normalize();
+					///what about division by zero? --> just set rayDirection[i] to INF/BT_LARGE_FLOAT
+					btVector3 rayDirectionInverse;
+					rayDirectionInverse[0] = rayDir[0] == btScalar(0.0) ? btScalar(BT_LARGE_FLOAT) : btScalar(1.0) / rayDir[0];
+					rayDirectionInverse[1] = rayDir[1] == btScalar(0.0) ? btScalar(BT_LARGE_FLOAT) : btScalar(1.0) / rayDir[1];
+					rayDirectionInverse[2] = rayDir[2] == btScalar(0.0) ? btScalar(BT_LARGE_FLOAT) : btScalar(1.0) / rayDir[2];
+					unsigned int signs[3];
+					signs[0] = rayDirectionInverse[0] < 0.0;
+					signs[1] = rayDirectionInverse[1] < 0.0;
+					signs[2] = rayDirectionInverse[2] < 0.0;
+
+					btScalar lambda_max;
+					lambda_max = rayDir.dot((worldToCollisionObject * convexToTrans).getOrigin() - (worldToCollisionObject * convexFromTrans).getOrigin());
+
+					
+					btVector3 castShapeAabbMin, castShapeAabbMax;
+					/* Compute AABB that encompasses angular movement */
+					{
+						btVector3 linVel, angVel;
+						btTransformUtil::calculateVelocity(worldToCollisionObject * convexFromTrans, worldToCollisionObject * convexToTrans, 1.0f, linVel, angVel);
+						btVector3 zeroLinVel;
+						zeroLinVel.setValue(0, 0, 0);
+						btTransform R;
+						R.setIdentity();
+						R.setRotation(convexFromTrans.getRotation());
+						castShape->calculateTemporalAabb(R, zeroLinVel, angVel, 1.0f, castShapeAabbMin, castShapeAabbMax);
+					}
+					
+					btAlignedObjectArray<const btDbvtNode*> localStack;
+					
+					tree->rayTestInternal(tree->m_root, 
+						(worldToCollisionObject * convexFromTrans).getOrigin(), 
+						(worldToCollisionObject * convexToTrans).getOrigin(), 
+						rayDirectionInverse, signs, lambda_max, castShapeAabbMin, castShapeAabbMax, localStack, callback);
 				}
 				else
 				{
