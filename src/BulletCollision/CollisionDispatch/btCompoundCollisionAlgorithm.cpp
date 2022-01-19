@@ -23,6 +23,9 @@ subject to the following restrictions:
 #include "btManifoldResult.h"
 #include "BulletCollision/CollisionDispatch/btCollisionObjectWrapper.h"
 
+//USE_LOCAL_STACK will avoid most (often all) dynamic memory allocations due to resizing in processCollision
+#define USE_LOCAL_STACK 1
+
 btShapePairCallback gCompoundChildShapePairCallback = 0;
 
 btCompoundCollisionAlgorithm::btCompoundCollisionAlgorithm(const btCollisionAlgorithmConstructionInfo& ci, const btCollisionObjectWrapper* body0Wrap, const btCollisionObjectWrapper* body1Wrap, bool isSwapped)
@@ -32,58 +35,14 @@ btCompoundCollisionAlgorithm::btCompoundCollisionAlgorithm(const btCollisionAlgo
 {
 	m_ownsManifold = false;
 
+	void* ptr = btAlignedAlloc(sizeof(btHashedSimplePairCache), 16);
+	m_childCollisionAlgorithmCache = new (ptr) btHashedSimplePairCache();
+
 	const btCollisionObjectWrapper* colObjWrap = m_isSwapped ? body1Wrap : body0Wrap;
 	btAssert(colObjWrap->getCollisionShape()->isCompound());
 
 	const btCompoundShape* compoundShape = static_cast<const btCompoundShape*>(colObjWrap->getCollisionShape());
 	m_compoundShapeRevision = compoundShape->getUpdateRevision();
-
-	preallocateChildAlgorithms(body0Wrap, body1Wrap);
-}
-
-void btCompoundCollisionAlgorithm::preallocateChildAlgorithms(const btCollisionObjectWrapper* body0Wrap, const btCollisionObjectWrapper* body1Wrap)
-{
-	const btCollisionObjectWrapper* colObjWrap = m_isSwapped ? body1Wrap : body0Wrap;
-	const btCollisionObjectWrapper* otherObjWrap = m_isSwapped ? body0Wrap : body1Wrap;
-	btAssert(colObjWrap->getCollisionShape()->isCompound());
-
-	const btCompoundShape* compoundShape = static_cast<const btCompoundShape*>(colObjWrap->getCollisionShape());
-
-	int numChildren = compoundShape->getNumChildShapes();
-	int i;
-
-	m_childCollisionAlgorithms.resize(numChildren);
-	for (i = 0; i < numChildren; i++)
-	{
-		if (compoundShape->getDynamicAabbTree())
-		{
-			m_childCollisionAlgorithms[i] = 0;
-		}
-		else
-		{
-			const btCollisionShape* childShape = compoundShape->getChildShape(i);
-
-			btCollisionObjectWrapper childWrap(colObjWrap, childShape, colObjWrap->getCollisionObject(), colObjWrap->getWorldTransform(), -1, i);  //wrong child trans, but unused (hopefully)
-			m_childCollisionAlgorithms[i] = m_dispatcher->findAlgorithm(&childWrap, otherObjWrap, m_sharedManifold, BT_CONTACT_POINT_ALGORITHMS);
-
-			btAlignedObjectArray<btCollisionAlgorithm*> m_childCollisionAlgorithmsContact;
-			btAlignedObjectArray<btCollisionAlgorithm*> m_childCollisionAlgorithmsClosestPoints;
-		}
-	}
-}
-
-void btCompoundCollisionAlgorithm::removeChildAlgorithms()
-{
-	int numChildren = m_childCollisionAlgorithms.size();
-	int i;
-	for (i = 0; i < numChildren; i++)
-	{
-		if (m_childCollisionAlgorithms[i])
-		{
-			m_childCollisionAlgorithms[i]->~btCollisionAlgorithm();
-			m_dispatcher->freeCollisionAlgorithm(m_childCollisionAlgorithms[i]);
-		}
-	}
 }
 
 btCompoundCollisionAlgorithm::~btCompoundCollisionAlgorithm()
@@ -91,19 +50,57 @@ btCompoundCollisionAlgorithm::~btCompoundCollisionAlgorithm()
 	removeChildAlgorithms();
 }
 
+void btCompoundCollisionAlgorithm::getAllContactManifolds(btManifoldArray& manifoldArray)
+{
+	int i;
+	btSimplePairArray& pairs = m_childCollisionAlgorithmCache->getOverlappingPairArray();
+	for (i = 0; i < pairs.size(); i++)
+	{
+		if (pairs[i].m_userPointer)
+		{
+			((btCollisionAlgorithm*)pairs[i].m_userPointer)->getAllContactManifolds(manifoldArray);
+		}
+	}
+}
+
+void btCompoundCollisionAlgorithm::removeChildAlgorithms()
+{
+	btSimplePairArray& pairs = m_childCollisionAlgorithmCache->getOverlappingPairArray();
+
+	int numChildren = pairs.size();
+	int i;
+	for (i = 0; i < numChildren; i++)
+	{
+		if (pairs[i].m_userPointer)
+		{
+			btCollisionAlgorithm* algo = (btCollisionAlgorithm*)pairs[i].m_userPointer;
+			algo->~btCollisionAlgorithm();
+			m_dispatcher->freeCollisionAlgorithm(algo);
+		}
+	}
+	m_childCollisionAlgorithmCache->removeAllPairs();
+}
+
 struct btCompoundLeafCallback : btDbvt::ICollide
 {
-public:
 	const btCollisionObjectWrapper* m_compoundColObjWrap;
 	const btCollisionObjectWrapper* m_otherObjWrap;
 	btDispatcher* m_dispatcher;
 	const btDispatcherInfo& m_dispatchInfo;
 	btManifoldResult* m_resultOut;
-	btCollisionAlgorithm** m_childCollisionAlgorithms;
+
+	class btHashedSimplePairCache* m_childCollisionAlgorithmCache;
+
 	btPersistentManifold* m_sharedManifold;
 
-	btCompoundLeafCallback(const btCollisionObjectWrapper* compoundObjWrap, const btCollisionObjectWrapper* otherObjWrap, btDispatcher* dispatcher, const btDispatcherInfo& dispatchInfo, btManifoldResult* resultOut, btCollisionAlgorithm** childCollisionAlgorithms, btPersistentManifold* sharedManifold)
-		: m_compoundColObjWrap(compoundObjWrap), m_otherObjWrap(otherObjWrap), m_dispatcher(dispatcher), m_dispatchInfo(dispatchInfo), m_resultOut(resultOut), m_childCollisionAlgorithms(childCollisionAlgorithms), m_sharedManifold(sharedManifold)
+	btCompoundLeafCallback(const btCollisionObjectWrapper* compoundObjWrap,
+						   const btCollisionObjectWrapper* otherObjWrap,
+						   btDispatcher* dispatcher,
+						   const btDispatcherInfo& dispatchInfo,
+						   btManifoldResult* resultOut,
+						   btHashedSimplePairCache* childAlgorithmsCache,
+						   btPersistentManifold* sharedManifold)
+		: m_compoundColObjWrap(compoundObjWrap), m_otherObjWrap(otherObjWrap), m_dispatcher(dispatcher), m_dispatchInfo(dispatchInfo), m_resultOut(resultOut), m_childCollisionAlgorithmCache(childAlgorithmsCache), m_sharedManifold(sharedManifold)
 	{
 	}
 
@@ -141,23 +138,30 @@ public:
 		{
 			btCollisionObjectWrapper compoundWrap(this->m_compoundColObjWrap, childShape, m_compoundColObjWrap->getCollisionObject(), newChildWorldTrans, -1, index);
 
-			btCollisionAlgorithm* algo = 0;
-			bool allocatedAlgorithm = false;
-
+			btSimplePair* pair = m_childCollisionAlgorithmCache->findPair(index, 0);
+			bool removePair = false;
+			btCollisionAlgorithm* colAlgo = 0;
 			if (m_resultOut->m_closestPointDistanceThreshold > 0)
 			{
-				algo = m_dispatcher->findAlgorithm(&compoundWrap, m_otherObjWrap, 0, BT_CLOSEST_POINT_ALGORITHMS);
-				allocatedAlgorithm = true;
+				colAlgo = m_dispatcher->findAlgorithm(&compoundWrap, m_otherObjWrap, 0, BT_CLOSEST_POINT_ALGORITHMS);
+				removePair = true;
 			}
 			else
 			{
-				//the contactpoint is still projected back using the original inverted worldtrans
-				if (!m_childCollisionAlgorithms[index])
+				if (pair)
 				{
-					m_childCollisionAlgorithms[index] = m_dispatcher->findAlgorithm(&compoundWrap, m_otherObjWrap, m_sharedManifold, BT_CONTACT_POINT_ALGORITHMS);
+					colAlgo = (btCollisionAlgorithm*)pair->m_userPointer;
 				}
-				algo = m_childCollisionAlgorithms[index];
+				else
+				{
+					colAlgo = m_dispatcher->findAlgorithm(&compoundWrap, m_otherObjWrap, m_sharedManifold, BT_CONTACT_POINT_ALGORITHMS);
+					pair = m_childCollisionAlgorithmCache->addOverlappingPair(index, 0);
+					btAssert(pair);
+					pair->m_userPointer = colAlgo;
+				}
 			}
+
+			btAssert(colAlgo);
 
 			const btCollisionObjectWrapper* tmpWrap = 0;
 
@@ -175,7 +179,7 @@ public:
 				m_resultOut->setShapeIdentifiersB(-1, index);
 			}
 
-			algo->processCollision(&compoundWrap, m_otherObjWrap, m_dispatchInfo, m_resultOut);
+			colAlgo->processCollision(&compoundWrap, m_otherObjWrap, m_dispatchInfo, m_resultOut);
 
 #if 0
 			if (m_dispatchInfo.m_debugDraw && (m_dispatchInfo.m_debugDraw->getDebugMode() & btIDebugDraw::DBG_DrawAabb))
@@ -194,10 +198,10 @@ public:
 			{
 				m_resultOut->setBody1Wrap(tmpWrap);
 			}
-			if (allocatedAlgorithm)
+			if (removePair)
 			{
-				algo->~btCollisionAlgorithm();
-				m_dispatcher->freeCollisionAlgorithm(algo);
+				colAlgo->~btCollisionAlgorithm();
+				m_dispatcher->freeCollisionAlgorithm(colAlgo);
 			}
 		}
 	}
@@ -236,36 +240,37 @@ void btCompoundCollisionAlgorithm::processCollision(const btCollisionObjectWrapp
 	{
 		///clear and update all
 		removeChildAlgorithms();
-
-		preallocateChildAlgorithms(body0Wrap, body1Wrap);
 		m_compoundShapeRevision = compoundShape->getUpdateRevision();
 	}
-
-	if (m_childCollisionAlgorithms.size() == 0)
-		return;
-
+	
 	const btDbvt* tree = compoundShape->getDynamicAabbTree();
 	//use a dynamic aabb tree to cull potential child-overlaps
-	btCompoundLeafCallback callback(colObjWrap, otherObjWrap, m_dispatcher, dispatchInfo, resultOut, &m_childCollisionAlgorithms[0], m_sharedManifold);
+	btCompoundLeafCallback callback(colObjWrap, otherObjWrap, m_dispatcher, dispatchInfo, resultOut, m_childCollisionAlgorithmCache, m_sharedManifold);
 
 	///we need to refresh all contact manifolds
 	///note that we should actually recursively traverse all children, btCompoundShape can nested more then 1 level deep
 	///so we should add a 'refreshManifolds' in the btCollisionAlgorithm
 	{
 		int i;
-		manifoldArray.resize(0);
-		for (i = 0; i < m_childCollisionAlgorithms.size(); i++)
+		btManifoldArray manifoldArray;
+#ifdef USE_LOCAL_STACK
+		btPersistentManifold localManifolds[4];
+		manifoldArray.initializeFromBuffer(&localManifolds, 0, 4);
+#endif
+		btSimplePairArray& pairs = m_childCollisionAlgorithmCache->getOverlappingPairArray();
+		for (i = 0; i < pairs.size(); i++)
 		{
-			if (m_childCollisionAlgorithms[i])
+			if (pairs[i].m_userPointer)
 			{
-				m_childCollisionAlgorithms[i]->getAllContactManifolds(manifoldArray);
+				btCollisionAlgorithm* algo = (btCollisionAlgorithm*)pairs[i].m_userPointer;
+				algo->getAllContactManifolds(manifoldArray);
 				for (int m = 0; m < manifoldArray.size(); m++)
 				{
 					if (manifoldArray[m]->getNumContacts())
 					{
 						resultOut->setPersistentManifold(manifoldArray[m]);
 						resultOut->refreshContactPoints();
-						resultOut->setPersistentManifold(0);  //??necessary?
+						resultOut->setPersistentManifold(0);
 					}
 				}
 				manifoldArray.resize(0);
@@ -290,7 +295,7 @@ void btCompoundCollisionAlgorithm::processCollision(const btCollisionObjectWrapp
 	else
 	{
 		//iterate over all children, perform an AABB check inside ProcessChildShape
-		int numChildren = m_childCollisionAlgorithms.size();
+		int numChildren = compoundShape->getNumChildShapes();
 		int i;
 		for (i = 0; i < numChildren; i++)
 		{
@@ -299,87 +304,56 @@ void btCompoundCollisionAlgorithm::processCollision(const btCollisionObjectWrapp
 	}
 
 	{
-		//iterate over all children, perform an AABB check inside ProcessChildShape
-		int numChildren = m_childCollisionAlgorithms.size();
-		int i;
-		manifoldArray.resize(0);
-		const btCollisionShape* childShape = 0;
-		btTransform orgTrans;
+		btAssert(m_removePairs.size() == 0);
 
-		btTransform newChildWorldTrans;
+		//iterate over all children, perform an AABB check inside ProcessChildShape
+		btSimplePairArray& pairs = m_childCollisionAlgorithmCache->getOverlappingPairArray();
+
+		int i;
 		btVector3 aabbMin0, aabbMax0, aabbMin1, aabbMax1;
 
-		for (i = 0; i < numChildren; i++)
+		for (i = 0; i < pairs.size(); i++)
 		{
-			if (m_childCollisionAlgorithms[i])
+			if (pairs[i].m_userPointer)
 			{
-				childShape = compoundShape->getChildShape(i);
-				//if not longer overlapping, remove the algorithm
-				orgTrans = colObjWrap->getWorldTransform();
+				btCollisionAlgorithm* algo = (btCollisionAlgorithm*)pairs[i].m_userPointer;
 
-				const btTransform& childTrans = compoundShape->getChildTransform(i);
-				newChildWorldTrans = orgTrans * childTrans;
+				{
+					const btCollisionShape* childShape = 0;
 
-				//perform an AABB check first
-				childShape->getAabb(newChildWorldTrans, aabbMin0, aabbMax0);
+					btTransform newChildWorldTrans;
+					childShape = compoundShape->getChildShape(pairs[i].m_indexA);
+					const btTransform& childTrans = compoundShape->getChildTransform(pairs[i].m_indexA);
+					newChildWorldTrans = colObjWrap->getWorldTransform() * childTrans;
+					childShape->getAabb(newChildWorldTrans, aabbMin0, aabbMax0);
+				}
+				btVector3 thresholdVec(resultOut->m_closestPointDistanceThreshold, resultOut->m_closestPointDistanceThreshold, resultOut->m_closestPointDistanceThreshold);
+				aabbMin0 -= thresholdVec;
+				aabbMax0 += thresholdVec;
+				
+				btAssert(pairs[i].m_indexB == 0);
+
 				otherObjWrap->getCollisionShape()->getAabb(otherObjWrap->getWorldTransform(), aabbMin1, aabbMax1);
 
 				if (!TestAabbAgainstAabb2(aabbMin0, aabbMax0, aabbMin1, aabbMax1))
 				{
-					m_childCollisionAlgorithms[i]->~btCollisionAlgorithm();
-					m_dispatcher->freeCollisionAlgorithm(m_childCollisionAlgorithms[i]);
-					m_childCollisionAlgorithms[i] = 0;
+					algo->~btCollisionAlgorithm();
+					m_dispatcher->freeCollisionAlgorithm(algo);
+					m_removePairs.push_back(btSimplePair(pairs[i].m_indexA, pairs[i].m_indexB));
 				}
 			}
 		}
+		
+		for (i = 0; i < m_removePairs.size(); i++)
+		{
+			m_childCollisionAlgorithmCache->removeOverlappingPair(m_removePairs[i].m_indexA, m_removePairs[i].m_indexB);
+		}
+		m_removePairs.clear();
 	}
 }
 
 btScalar btCompoundCollisionAlgorithm::calculateTimeOfImpact(btCollisionObject* body0, btCollisionObject* body1, const btDispatcherInfo& dispatchInfo, btManifoldResult* resultOut)
 {
 	btAssert(0);
-	//needs to be fixed, using btCollisionObjectWrapper and NOT modifying internal data structures
-	btCollisionObject* colObj = m_isSwapped ? body1 : body0;
-	btCollisionObject* otherObj = m_isSwapped ? body0 : body1;
-
-	btAssert(colObj->getCollisionShape()->isCompound());
-
-	btCompoundShape* compoundShape = static_cast<btCompoundShape*>(colObj->getCollisionShape());
-
-	//We will use the OptimizedBVH, AABB tree to cull potential child-overlaps
-	//If both proxies are Compound, we will deal with that directly, by performing sequential/parallel tree traversals
-	//given Proxy0 and Proxy1, if both have a tree, Tree0 and Tree1, this means:
-	//determine overlapping nodes of Proxy1 using Proxy0 AABB against Tree1
-	//then use each overlapping node AABB against Tree0
-	//and vise versa.
-
-	btScalar hitFraction = btScalar(1.);
-
-	int numChildren = m_childCollisionAlgorithms.size();
-	int i;
-	btTransform orgTrans;
-	btScalar frac;
-	for (i = 0; i < numChildren; i++)
-	{
-		//btCollisionShape* childShape = compoundShape->getChildShape(i);
-
-		//backup
-		orgTrans = colObj->getWorldTransform();
-
-		const btTransform& childTrans = compoundShape->getChildTransform(i);
-		//btTransform	newChildWorldTrans = orgTrans*childTrans ;
-		colObj->setWorldTransform(orgTrans * childTrans);
-
-		//btCollisionShape* tmpShape = colObj->getCollisionShape();
-		//colObj->internalSetTemporaryCollisionShape( childShape );
-		frac = m_childCollisionAlgorithms[i]->calculateTimeOfImpact(colObj, otherObj, dispatchInfo, resultOut);
-		if (frac < hitFraction)
-		{
-			hitFraction = frac;
-		}
-		//revert back
-		//colObj->internalSetTemporaryCollisionShape( tmpShape);
-		colObj->setWorldTransform(orgTrans);
-	}
-	return hitFraction;
+	return 0.f;
 }

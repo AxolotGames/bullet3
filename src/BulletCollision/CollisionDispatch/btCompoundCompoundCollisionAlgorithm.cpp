@@ -68,24 +68,6 @@ void btCompoundCompoundCollisionAlgorithm::getAllContactManifolds(btManifoldArra
 	}
 }
 
-void btCompoundCompoundCollisionAlgorithm::removeChildAlgorithms()
-{
-	btSimplePairArray& pairs = m_childCollisionAlgorithmCache->getOverlappingPairArray();
-
-	int numChildren = pairs.size();
-	int i;
-	for (i = 0; i < numChildren; i++)
-	{
-		if (pairs[i].m_userPointer)
-		{
-			btCollisionAlgorithm* algo = (btCollisionAlgorithm*)pairs[i].m_userPointer;
-			algo->~btCollisionAlgorithm();
-			m_dispatcher->freeCollisionAlgorithm(algo);
-		}
-	}
-	m_childCollisionAlgorithmCache->removeAllPairs();
-}
-
 struct btCompoundCompoundLeafCallback : btDbvt::ICollide
 {
 	int m_numOverlapPairs;
@@ -339,7 +321,7 @@ void btCompoundCompoundCollisionAlgorithm::processCollision(const btCollisionObj
 		}
 	}
 
-	btCompoundCompoundLeafCallback callback(col0ObjWrap, col1ObjWrap, this->m_dispatcher, dispatchInfo, resultOut, this->m_childCollisionAlgorithmCache, m_sharedManifold);
+	btCompoundCompoundLeafCallback callback(col0ObjWrap, col1ObjWrap, m_dispatcher, dispatchInfo, resultOut, m_childCollisionAlgorithmCache, m_sharedManifold);
 
 	const btTransform xform = col0ObjWrap->getWorldTransform().inverse() * col1ObjWrap->getWorldTransform();
 	MycollideTT(tree0->m_root, tree1->m_root, xform, &callback, resultOut->m_closestPointDistanceThreshold);
@@ -355,8 +337,6 @@ void btCompoundCompoundCollisionAlgorithm::processCollision(const btCollisionObj
 		btSimplePairArray& pairs = m_childCollisionAlgorithmCache->getOverlappingPairArray();
 
 		int i;
-		btManifoldArray manifoldArray;
-
 		btVector3 aabbMin0, aabbMax0, aabbMin1, aabbMax1;
 
 		for (i = 0; i < pairs.size(); i++)
@@ -398,7 +378,7 @@ void btCompoundCompoundCollisionAlgorithm::processCollision(const btCollisionObj
 				}
 			}
 		}
-		for (int i = 0; i < m_removePairs.size(); i++)
+		for (i = 0; i < m_removePairs.size(); i++)
 		{
 			m_childCollisionAlgorithmCache->removeOverlappingPair(m_removePairs[i].m_indexA, m_removePairs[i].m_indexB);
 		}

@@ -39,13 +39,8 @@ extern btShapePairCallback gCompoundCompoundChildShapePairCallback;
 /// btCompoundCompoundCollisionAlgorithm  supports collision between two btCompoundCollisionShape shapes
 class btCompoundCompoundCollisionAlgorithm : public btCompoundCollisionAlgorithm
 {
-	class btHashedSimplePairCache* m_childCollisionAlgorithmCache;
-	btSimplePairArray m_removePairs;
-
 	int m_compoundShapeRevision0;  //to keep track of changes, so that childAlgorithm array can be updated
 	int m_compoundShapeRevision1;
-
-	void removeChildAlgorithms();
 
 	//	void	preallocateChildAlgorithms(const btCollisionObjectWrapper* body0Wrap,const btCollisionObjectWrapper* body1Wrap);
 
