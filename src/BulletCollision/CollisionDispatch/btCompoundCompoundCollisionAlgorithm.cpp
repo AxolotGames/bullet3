@@ -55,19 +55,6 @@ btCompoundCompoundCollisionAlgorithm::~btCompoundCompoundCollisionAlgorithm()
 	btAlignedFree(m_childCollisionAlgorithmCache);
 }
 
-void btCompoundCompoundCollisionAlgorithm::getAllContactManifolds(btManifoldArray& manifoldArray)
-{
-	int i;
-	btSimplePairArray& pairs = m_childCollisionAlgorithmCache->getOverlappingPairArray();
-	for (i = 0; i < pairs.size(); i++)
-	{
-		if (pairs[i].m_userPointer)
-		{
-			((btCollisionAlgorithm*)pairs[i].m_userPointer)->getAllContactManifolds(manifoldArray);
-		}
-	}
-}
-
 struct btCompoundCompoundLeafCallback : btDbvt::ICollide
 {
 	int m_numOverlapPairs;
