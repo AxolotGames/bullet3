@@ -886,10 +886,13 @@ void btCollisionWorld::objectQuerySingleInternal(const btConvexShape* castShape,
 				if (tree)
 				{
 					btTransform worldToCollisionObject = colObjWorldTransform.inverse();
-				
-					btVector3 rayDir = (worldToCollisionObject * convexToTrans).getOrigin() - (worldToCollisionObject * convexFromTrans).getOrigin();
 
-					rayDir.normalize();
+					btTransform localFromTrans = worldToCollisionObject * convexToTrans;
+					btTransform localToTrans = worldToCollisionObject * convexFromTrans;
+
+					// From btSingleSweepCallback
+					btVector3 unnormalizedRayDir = localFromTrans.getOrigin() - localToTrans.getOrigin();
+					btVector3 rayDir = unnormalizedRayDir.normalized();
 					///what about division by zero? --> just set rayDirection[i] to INF/BT_LARGE_FLOAT
 					btVector3 rayDirectionInverse;
 					rayDirectionInverse[0] = rayDir[0] == btScalar(0.0) ? btScalar(BT_LARGE_FLOAT) : btScalar(1.0) / rayDir[0];
@@ -900,15 +903,14 @@ void btCollisionWorld::objectQuerySingleInternal(const btConvexShape* castShape,
 					signs[1] = rayDirectionInverse[1] < 0.0;
 					signs[2] = rayDirectionInverse[2] < 0.0;
 
-					btScalar lambda_max;
-					lambda_max = rayDir.dot((worldToCollisionObject * convexToTrans).getOrigin() - (worldToCollisionObject * convexFromTrans).getOrigin());
+					btScalar lambda_max = rayDir.dot(unnormalizedRayDir);
 
-					
+					// From btCollisionWorld::convexSweepTest
 					btVector3 castShapeAabbMin, castShapeAabbMax;
 					/* Compute AABB that encompasses angular movement */
 					{
 						btVector3 linVel, angVel;
-						btTransformUtil::calculateVelocity(worldToCollisionObject * convexFromTrans, worldToCollisionObject * convexToTrans, 1.0f, linVel, angVel);
+						btTransformUtil::calculateVelocity(localToTrans, localFromTrans, 1.0f, linVel, angVel);
 						btVector3 zeroLinVel;
 						zeroLinVel.setValue(0, 0, 0);
 						btTransform R;
@@ -920,8 +922,7 @@ void btCollisionWorld::objectQuerySingleInternal(const btConvexShape* castShape,
 					btAlignedObjectArray<const btDbvtNode*> localStack;
 					
 					tree->rayTestInternal(tree->m_root, 
-						(worldToCollisionObject * convexFromTrans).getOrigin(), 
-						(worldToCollisionObject * convexToTrans).getOrigin(), 
+						localToTrans.getOrigin(), localFromTrans.getOrigin(),
 						rayDirectionInverse, signs, lambda_max, castShapeAabbMin, castShapeAabbMax, localStack, callback);
 				}
 				else
