@@ -48,6 +48,8 @@ btCompoundCollisionAlgorithm::btCompoundCollisionAlgorithm(const btCollisionAlgo
 btCompoundCollisionAlgorithm::~btCompoundCollisionAlgorithm()
 {
 	removeChildAlgorithms();
+	m_childCollisionAlgorithmCache->~btHashedSimplePairCache();
+	btAlignedFree(m_childCollisionAlgorithmCache);
 }
 
 void btCompoundCollisionAlgorithm::getAllContactManifolds(btManifoldArray& manifoldArray)

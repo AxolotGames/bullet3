@@ -32,9 +32,6 @@ btShapePairCallback gCompoundCompoundChildShapePairCallback = 0;
 btCompoundCompoundCollisionAlgorithm::btCompoundCompoundCollisionAlgorithm(const btCollisionAlgorithmConstructionInfo& ci, const btCollisionObjectWrapper* body0Wrap, const btCollisionObjectWrapper* body1Wrap, bool isSwapped)
 	: btCompoundCollisionAlgorithm(ci, body0Wrap, body1Wrap, isSwapped)
 {
-	void* ptr = btAlignedAlloc(sizeof(btHashedSimplePairCache), 16);
-	m_childCollisionAlgorithmCache = new (ptr) btHashedSimplePairCache();
-
 	const btCollisionObjectWrapper* col0ObjWrap = body0Wrap;
 	btAssert(col0ObjWrap->getCollisionShape()->isCompound());
 
@@ -46,13 +43,6 @@ btCompoundCompoundCollisionAlgorithm::btCompoundCompoundCollisionAlgorithm(const
 
 	const btCompoundShape* compoundShape1 = static_cast<const btCompoundShape*>(col1ObjWrap->getCollisionShape());
 	m_compoundShapeRevision1 = compoundShape1->getUpdateRevision();
-}
-
-btCompoundCompoundCollisionAlgorithm::~btCompoundCompoundCollisionAlgorithm()
-{
-	removeChildAlgorithms();
-	m_childCollisionAlgorithmCache->~btHashedSimplePairCache();
-	btAlignedFree(m_childCollisionAlgorithmCache);
 }
 
 struct btCompoundCompoundLeafCallback : btDbvt::ICollide
