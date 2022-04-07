@@ -147,10 +147,7 @@ public:
 	///it can be useful to use if you perform ray tests without collision detection/simulation
 	virtual void computeOverlappingPairs();
 
-	virtual void setDebugDrawer(btIDebugDraw* debugDrawer)
-	{
-		m_debugDrawer = debugDrawer;
-	}
+	virtual void setDebugDrawer(btIDebugDraw* debugDrawer);
 
 	virtual btIDebugDraw* getDebugDrawer()
 	{
@@ -159,7 +156,7 @@ public:
 
 	virtual void debugDrawWorld();
 
-	virtual void debugDrawObject(const btTransform& worldTransform, const btCollisionShape* shape, const btVector3& color);
+	static void debugDrawObject(const btTransform& worldTransform, const btCollisionShape* shape, const btVector3& color);
 
 	///LocalShapeInfo gives extra information for complex shapes
 	///Currently, only btTriangleMeshShape is available, so it just contains triangleIndex and subpart
