@@ -878,7 +878,7 @@ void btCollisionWorld::objectQuerySingleInternal(const btConvexShape* castShape,
 
 				BT_PROFILE("convexSweepCompound");
 				const btCompoundShape* compoundShape = static_cast<const btCompoundShape*>(collisionShape);
-				
+
 				btCompoundLeafCallback callback(colObjWrap, castShape, convexFromTrans, convexToTrans,
 												allowedPenetration, compoundShape, colObjWorldTransform, resultCallback);
 
@@ -887,11 +887,11 @@ void btCollisionWorld::objectQuerySingleInternal(const btConvexShape* castShape,
 				{
 					btTransform worldToCollisionObject = colObjWorldTransform.inverse();
 
-					btTransform compoundLocalFromTrans = worldToCollisionObject * convexToTrans;
-					btTransform compoundLocalToTrans = worldToCollisionObject * convexFromTrans;
+					btTransform compoundLocalFromTrans = worldToCollisionObject * convexFromTrans;
+					btTransform compoundLocalToTrans = worldToCollisionObject * convexToTrans;
 
 					// From btSingleSweepCallback
-					btVector3 unnormalizedRayDir = compoundLocalFromTrans.getOrigin() - compoundLocalToTrans.getOrigin();
+					btVector3 unnormalizedRayDir = (compoundLocalToTrans.getOrigin() - compoundLocalFromTrans.getOrigin());
 					btVector3 rayDir = unnormalizedRayDir.normalized();
 					///what about division by zero? --> just set rayDirection[i] to INF/BT_LARGE_FLOAT
 					btVector3 rayDirectionInverse;
@@ -905,24 +905,21 @@ void btCollisionWorld::objectQuerySingleInternal(const btConvexShape* castShape,
 
 					btScalar lambda_max = rayDir.dot(unnormalizedRayDir);
 
-					// From btCollisionWorld::convexSweepTest
 					btVector3 castShapeAabbMin, castShapeAabbMax;
-					/* Compute AABB that encompasses angular movement */
-					{
-						btVector3 linVel, angVel;
-						btTransformUtil::calculateVelocity(compoundLocalToTrans, compoundLocalFromTrans, 1.0f, linVel, angVel);
-						btVector3 zeroLinVel;
-						zeroLinVel.setValue(0, 0, 0);
-						btTransform R;
-						R.setIdentity();
-						R.setRotation(convexFromTrans.getRotation());
-						castShape->calculateTemporalAabb(R, zeroLinVel, angVel, 1.0f, castShapeAabbMin, castShapeAabbMax);
-					}
+					// Compute AABB that encompasses angular movement, in bvh local space
+					btVector3 linVel, angVel;
+					btTransformUtil::calculateVelocity(compoundLocalFromTrans, compoundLocalToTrans, 1.0f, linVel, angVel);
+					btVector3 zeroLinVel;
+					zeroLinVel.setValue(0, 0, 0);
+					btTransform R;
+					R.setIdentity();
+					R.setRotation(compoundLocalFromTrans.getRotation());
+					castShape->calculateTemporalAabb(R, zeroLinVel, angVel, 1.0f, castShapeAabbMin, castShapeAabbMax);
 					
 					btAlignedObjectArray<const btDbvtNode*> localStack;
 					
 					tree->rayTestInternal(tree->m_root, 
-						compoundLocalToTrans.getOrigin(), compoundLocalFromTrans.getOrigin(),
+						compoundLocalFromTrans.getOrigin(), compoundLocalToTrans.getOrigin(),
 						rayDirectionInverse, signs, lambda_max, castShapeAabbMin, castShapeAabbMax, localStack, callback);
 				}
 				else
